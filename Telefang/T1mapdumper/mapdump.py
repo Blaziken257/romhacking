@@ -2,13 +2,19 @@ import struct
 import time
 import sys
 import os
+try:
+    import png
+except ImportError:
+    sys.exit("You need to have the PyPNG package installed in order to run this program.\n\
+For more information, go to:\n\
+http://pypi.python.org/pypi/pypng/0.0.13")
 from colorize import *
 from genpalettes import *
 from drawtiles import *
 from gamemap import *
 from acres import *
 
-print "Telefang Map Dumper"
+print "Telefang Map Dumper v2.0"
 
 print "Enter the filename of your Telefang ROM or drag it here:"
 while True:
@@ -27,13 +33,7 @@ while True:
             else:
                 print "File name must end in .gbc. Enter a new file:"
             continue
-	#IDLE hates __file__
-        try:
-            #This line below is necessary for the program to work
-            #on Ubuntu (and possibly other Linux based OS's)
-            filename = os.path.join(os.path.dirname(__file__), filename)
-        except NameError:
-            pass
+	filename = os.path.join(os.getcwd(), filename)
         rom = open(filename, "rb")
         break
     except IOError:
@@ -214,13 +214,8 @@ elif location == 0x2D:
 else:
     pal_offset = 0x34010
     tile_file = "overworld.pgm"
-    
-tile_file = "images/" + tile_file
-try:
-    tile_file = os.path.join(os.path.dirname(__file__), tile_file)
-except NameError:
-    pass
 
+tile_file = os.path.join(os.getcwd(), "images", tile_file)
 
 print "Reading 8x8 tiles from %s..." % tile_file
 tiles = drawtiles(tile_file)
@@ -274,58 +269,55 @@ tilemap = tilemap(largetiles,acres)
 #Each small tile is 8x8 pixels (so 1280x1024 pixels per map)
 #Each pixel has three colors (so 1280x1024x3 = 3,932,160 colors/map)
 
+o_filename = os.path.join(os.getcwd(), "outputmap.png")
+outputfile = open(o_filename, "wb")
+width = 1280
+height = 1024
+print "Generating pixel map."
 if grayscale == 1:
-    o_filename = "outputmap.pgm"
-    try:
-        o_filename = os.path.join(os.path.dirname(__file__), o_filename)
-    except NameError:
-        pass       
-    outputfile = open(o_filename, "wb")
-    print "Writing to file %s..." % o_filename
-    print "Image will be in grayscale. It will be 1.25 MB long."
-    outputfile.write(b"P5")
+    print "Image will be in grayscale."
+    w = png.Writer(width, height, alpha=True, greyscale=True, bitdepth=2, compression=9)
 elif grayscale == 0:
-    o_filename = "outputmap.ppm"
-    try:
-        o_filename = os.path.join(os.path.dirname(__file__), o_filename)
-    except NameError:
-        pass
-    outputfile = open(o_filename, "wb")
-    print "Writing to file %s..." % o_filename
-    print "Image will be in color. It will be 3.75 MB long."
-    outputfile.write(b"P6")
-outputfile.write(b"\n1280 1024\n")
-if grayscale == 1:
-    outputfile.write("3\n")
-elif grayscale == 0:
-    outputfile.write("31\n")
+    print "Image will be in color."
+    w = png.Writer(width, height, alpha=True, compression=9)
 h_pos = 0
 v_pos = 0
-for v_pos in range(1024):
-    for h_pos in range(1280):
+pixelmap = []
+for v_pos in range(height):
+    pixelmap.append([])
+    for h_pos in range(width):
         if grayscale == 1:
-            s = tilemap[v_pos/128][h_pos/160][(v_pos%128)/16][(h_pos%160)/16][(v_pos%16)/8][(h_pos%16)/8][v_pos%8][h_pos%8]
+            #Write color
+            pixel = tilemap[v_pos/128][h_pos/160][(v_pos%128)/16][(h_pos%160)/16][(v_pos%16)/8][(h_pos%16)/8][v_pos%8][h_pos%8]
+            pixelmap[v_pos].append(pixel)
+            #Alpha transparency!
             if map_tiles[v_pos/128][h_pos/160] == 0 and not validacre(location,v_pos/128,h_pos/160):
-                s -= 2
-                if s < 0:
-                    s = 0
-            s = "%c" % s
-            outputfile.write(s)
+                alpha = 1
+            else:
+                alpha = 3
+            pixelmap[v_pos].append(alpha)
+            
         else:
             for i in range(3):
-                s = tilemap[v_pos/128][h_pos/160][(v_pos%128)/16][(h_pos%160)/16][(v_pos%16)/8][(h_pos%16)/8][v_pos%8][h_pos%8][i]
-                if map_tiles[v_pos/128][h_pos/160] == 0 and not validacre(location,v_pos/128,h_pos/160):
-                    s /= 3
-                s = "%c" % s
-                outputfile.write(s)
+                pixel = tilemap[v_pos/128][h_pos/160][(v_pos%128)/16][(h_pos%160)/16][(v_pos%16)/8][(h_pos%16)/8][v_pos%8][h_pos%8][i] << 3
+                pixelmap[v_pos].append(pixel)
+            #Alpha transparency!
+            if map_tiles[v_pos/128][h_pos/160] == 0 and not validacre(location,v_pos/128,h_pos/160):
+                alpha = 85
+            else:
+                alpha = 255
+            pixelmap[v_pos].append(alpha)
+
     #Comment this portion out if you're using IDLE!
     progress = (v_pos + 1)* 100 / 1024
-    if progress % 5 == 0:
-        sys.stdout.write("Progress: %3d%% [%s]\r" % (progress, "-" * (progress / 5) + " " * ((100 - progress) / 5)))
+    if v_pos % 64 == 63 or v_pos == 0:
+        sys.stdout.write("Progress: {: >7} of 1310720 pixels ({: >3}%) [{}]\r".format((v_pos+1)*width, progress, "-" * (progress / 5) + " " * ((104 - progress) / 5)))
         sys.stdout.flush()
+del pixel, alpha, h_pos, v_pos
+print "\nWriting to file %s..." % o_filename
+w.write(outputfile, pixelmap)
 outputfile.close()
 print "\nFile closed."
-
 print "Finished ripping the map.\nTHANK YOU FOR YOUR USING!"
 
 time.sleep(0.8)
