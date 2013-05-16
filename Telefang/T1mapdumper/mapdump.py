@@ -1,6 +1,6 @@
 import struct
-import time
-import sys
+#import time
+#import sys
 import os
 try:
     import png
@@ -8,13 +8,14 @@ except ImportError:
     sys.exit("You need to have the PyPNG package installed in order to run this program.\n\
 For more information, go to:\n\
 http://pypi.python.org/pypi/pypng/0.0.13")
-from colorize import *
-from genpalettes import *
-from drawtiles import *
-from gamemap import *
-from acres import *
+from colorize import colorize
+from genpalettes import genpalettes
+from drawtiles import drawtiles, drawlargetiles
+from gamemap import gamemap
+from acres import acres, tilemap
+from outputfile import outputfile
 
-print "Telefang Map Dumper v2.0"
+print "Telefang Map Dumper v2.1"
 
 print "Enter the filename of your Telefang ROM or drag it here:"
 while True:
@@ -82,8 +83,7 @@ while (location > 0x34 or location < 0x00):
                 print "48 - Second D-Shot                   49 - Palm Sea Antenna Tree switch room"
                 print "50 - Sanaeba Research Center - F1    51 - Sanaeba Research Center - B1"
                 print "52 - Sanaeba Research Center - B2"
-                print ""
-                print "Now enter in a location:"
+                print "\nNow enter in a location. You may either use decimal or hexadecimal format:"
                 location = raw_input()
             
             if location.startswith("0x"):
@@ -138,7 +138,6 @@ game_acres = (struct.unpack("<B",rom.read(1))[0])
 print "ROM bank is 0x%02X." % game_acres
 game_acres = game_acres % 0x80 * 0x4000
 
-
 print "Generating acres starting at offset 0x%X..." % game_acres
 acres = acres(rom,map_tiles,game_acres)
 
@@ -147,7 +146,23 @@ pal_offsets = [[0x035280, 0x0352A8, 0x0352D0, 0x0352F8, 0x035320, 0x035348, 0x03
 
 #Overworld
 if (location >= 0x02 and location <= 0x09) or location == 0x00:
-    hour = int(time.strftime("%H"))
+    #Prompt for hour
+    print "You selected an overworld map. Please select\n\
+the desired hour of day, in 24-hour format:"
+    validhour = False
+    while validhour == False:
+        hour = raw_input()
+        try:
+            hour = int(hour)
+            if hour == 24: #Set 24 -> 0, since VBA will undoubtedly confuse people
+                hour = 0
+            elif hour < 0 or hour > 23:
+                print "Invalid hour. You must choose in this range: 0-23. Select an hour:"
+            else:
+                validhour = True
+        except ValueError:
+            print "Invalid input. You must enter an integer in the range 0-23:"
+    del validhour
     print "Current hour: %d" % hour
     pal_offset = pal_offsets[0][hour]
     if location >= 0x06 or location == 0x00:
@@ -261,63 +276,21 @@ print "ROM closed."
 
 #Generate every tile used in the entire map
 print "Generating every tile in the map..."
-tilemap = tilemap(largetiles,acres)
+tile_map = tilemap(largetiles,acres)
+
+print "Generating map's tileset..."
+tileset = tilemap(largetiles)
+
+outputfile("outputtiles.png",1,tileset,map_tiles,location,grayscale)
+print "Finished outputting the tiles."
 
 #Each map has 8x8 acres
 #Each acre has 10x8 large tiles (so 80x64 large tiles)
 #Each large tile is broken up into 2x2 small tiles (so 160x128 small tiles)
 #Each small tile is 8x8 pixels (so 1280x1024 pixels per map)
 #Each pixel has three colors (so 1280x1024x3 = 3,932,160 colors/map)
+outputfile("outputmap.png",0,tile_map,map_tiles,location,grayscale)
+print "Finished ripping the map."
+print "THANK YOU FOR YOUR USING!\nPress Enter to exit the program."
 
-o_filename = os.path.join(os.getcwd(), "outputmap.png")
-outputfile = open(o_filename, "wb")
-width = 1280
-height = 1024
-print "Generating pixel map."
-if grayscale == 1:
-    print "Image will be in grayscale."
-    w = png.Writer(width, height, alpha=True, greyscale=True, bitdepth=2, compression=9)
-elif grayscale == 0:
-    print "Image will be in color."
-    w = png.Writer(width, height, alpha=True, compression=9)
-h_pos = 0
-v_pos = 0
-pixelmap = []
-for v_pos in range(height):
-    pixelmap.append([])
-    for h_pos in range(width):
-        if grayscale == 1:
-            #Write color
-            pixel = tilemap[v_pos/128][h_pos/160][(v_pos%128)/16][(h_pos%160)/16][(v_pos%16)/8][(h_pos%16)/8][v_pos%8][h_pos%8]
-            pixelmap[v_pos].append(pixel)
-            #Alpha transparency!
-            if map_tiles[v_pos/128][h_pos/160] == 0 and not validacre(location,v_pos/128,h_pos/160):
-                alpha = 1
-            else:
-                alpha = 3
-            pixelmap[v_pos].append(alpha)
-            
-        else:
-            for i in range(3):
-                pixel = tilemap[v_pos/128][h_pos/160][(v_pos%128)/16][(h_pos%160)/16][(v_pos%16)/8][(h_pos%16)/8][v_pos%8][h_pos%8][i] << 3
-                pixelmap[v_pos].append(pixel)
-            #Alpha transparency!
-            if map_tiles[v_pos/128][h_pos/160] == 0 and not validacre(location,v_pos/128,h_pos/160):
-                alpha = 85
-            else:
-                alpha = 255
-            pixelmap[v_pos].append(alpha)
-
-    #Comment this portion out if you're using IDLE!
-    progress = (v_pos + 1)* 100 / 1024
-    if v_pos % 64 == 63 or v_pos == 0:
-        sys.stdout.write("Progress: {: >7} of 1310720 pixels ({: >3}%) [{}]\r".format((v_pos+1)*width, progress, "-" * (progress / 5) + " " * ((104 - progress) / 5)))
-        sys.stdout.flush()
-del pixel, alpha, h_pos, v_pos
-print "\nWriting to file %s..." % o_filename
-w.write(outputfile, pixelmap)
-outputfile.close()
-print "\nFile closed."
-print "Finished ripping the map.\nTHANK YOU FOR YOUR USING!"
-
-time.sleep(0.8)
+raw_input()

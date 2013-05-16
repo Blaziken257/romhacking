@@ -1,4 +1,5 @@
 def colorize(t,p):
+        """Assigns 16x16 tiles certain palettes."""
         c = []
         for i, v in enumerate(t):
                 c.append([])

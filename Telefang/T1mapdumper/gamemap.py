@@ -1,6 +1,7 @@
 import struct
 
 def gamemap(rom,offset):
+    """Generates map's acres from a given ROM offset."""
     rom.seek(offset)
     map_tiles = []
     for i in range(8):

@@ -1,6 +1,7 @@
 import struct
 
 def drawtiles(filename):
+    """Generates tiles based on an image."""
     image = open(filename, "rb")
     elem = image.read().split()
     header=elem[0]
@@ -32,6 +33,7 @@ def drawtiles(filename):
     
 def drawlargetiles(rom,offset,tiles):
 
+    """Assembles 16x16 tiles from 8x8 tiles."""
     rom.seek(offset)
     largetiles = []
     for i in range(0x100):

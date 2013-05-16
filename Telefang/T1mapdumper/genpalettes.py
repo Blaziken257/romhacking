@@ -1,6 +1,7 @@
 import struct
 
 def genpalettes(i,rom):
+        """Generates palettes based on a RAM pointer. Returns an array of palettes."""
         offset = 0x34000 + (i % 0x4000)
         rom.seek(offset)
         pal=[]
